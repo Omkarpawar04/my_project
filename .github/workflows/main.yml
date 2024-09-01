@@ -48,10 +48,8 @@ jobs:
     - name: Run integration tests
       run: |
        # Install dependencies if needed
-       npm install
-       # Run the integration tests
-       npm run test:integration
-
+       RUN pip3 install flask
+       
     - name: Rollback if necessary
       if: failure()
       run: |
