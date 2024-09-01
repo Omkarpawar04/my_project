@@ -1,0 +1,51 @@
+name: Deploy to AWS ECS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Build, Tag, and Push Docker image
+        run: |
+          REPOSITORY_URI=222320796601.dkr.ecr.us-east-1.amazonaws.com/my-project
+          IMAGE_TAG=${GITHUB_SHA}
+          docker buildx build --platform linux/amd64 --push -t $REPOSITORY_URI:$IMAGE_TAG .
+
+      - name: Deploy to Amazon ECS
+        id: deploy-to-ecs
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ecs-task-def.json
+          service: my-service
+          cluster: devcluster
+          region: us-east-1
+          wait-for-service-stability: true
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ steps.login-ecr.outputs.repository }}:${{ github.sha }}
+
+      - name: Run Integration Tests
+        run: |
+          curl -f http://my-service-url/ || exit 1
+
+      - name: Rollback ECS Service on Failure
+        if: failure()
+        uses: aws-actions/amazon-ecs-update-service@v1
+        with:
+          cluster: my-cluster
+          service: my-service
+          desired-count: 1
+          task-definition: ecs-task-def-previous.json
